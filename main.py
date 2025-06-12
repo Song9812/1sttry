@@ -7,7 +7,7 @@ import folium
 from streamlit_folium import folium_static
 
 # 1. 데이터 로드 및 전처리
-@st.cache_data # 데이터를 한 번 로드하면 다시 로드하지 않도록 캐싱
+@st.cache_data
 def load_data(file_path):
     df = pd.read_csv(file_path, encoding='cp949') # 한글 인코딩 문제 해결을 위해 cp949 또는 utf-8-sig 시도
     # 'x 좌표'를 경도(longitude)로, 'y 좌표'를 위도(latitude)로 사용
@@ -72,7 +72,6 @@ def app():
         user_lat, user_lon = user_location
 
         # 각 화장실과의 거리 계산
-        # geodesic 함수는 (위도, 경도) 튜플을 인자로 받음
         df['거리_km'] = df.apply(
             lambda row: geodesic((user_lat, user_lon), (row['위도'], row['경도'])).km,
             axis=1
@@ -97,16 +96,20 @@ def app():
             # 근처 화장실 마커 추가
             for idx, row in nearby_toilets.iterrows():
                 # 팝업 정보 구성
+                # pd.notna(row['컬럼명']) 으로 NaN 값 체크 및 '정보 없음' 처리
                 popup_html = f"""
-                <b>화장실명:</b> {row['건물명'] if pd.notna(row['건물명']) else '정보 없음'}<br>
-                <b>도로명주소:</b> {row['도로명주소']}<br>
-                <b>거리:</b> {row['거리_km']:.2f} km<br>
+                <b>건물명:</b> {row['건물명'] if pd.notna(row['건물명']) else '정보 없음'}<br>
                 <b>개방시간:</b> {row['개방시간'] if pd.notna(row['개방시간']) else '정보 없음'}<br>
-                <b>장애인화장실:</b> {row['장애인화장실 현황'] if pd.notna(row['장애인화장실 현황']) else '정보 없음'}<br>
+                <b>화장실 현황:</b> {row['화장실 현황'] if pd.notna(row['화장실 현황']) else '정보 없음'}<br>
+                <b>장애인화장실 현황:</b> {row['장애인화장실 현황'] if pd.notna(row['장애인화장실 현황']) else '정보 없음'}<br>
+                <hr style="margin: 5px 0;">
+                거리: {row['거리_km']:.2f} km<br>
+                도로명주소: {row['도로명주소']}
                 """
                 
                 folium.Marker(
                     [row['위도'], row['경도']],
+                    # `folium.Popup`을 사용하여 HTML 콘텐츠를 포함하고 max_width로 크기 조절
                     popup=folium.Popup(popup_html, max_width=300),
                     icon=folium.Icon(color="blue", icon="info-sign", prefix="fa")
                 ).add_to(m)
@@ -116,11 +119,9 @@ def app():
 
             # 필터링된 화장실 목록 표시
             st.subheader("찾은 공중화장실 목록")
-            # 필요한 컬럼만 선택하여 표시 (예쁘게 보여주기 위함)
             display_cols = ['건물명', '도로명주소', '거리_km', '개방시간', '화장실 현황', '장애인화장실 현황', '전화번호']
-            # NaN 값은 '정보 없음'으로 대체하여 깔끔하게 표시
             display_df = nearby_toilets[display_cols].fillna('정보 없음')
-            display_df['거리_km'] = display_df['거리_km'].apply(lambda x: f"{x:.2f} km") # 거리 포맷팅
+            display_df['거리_km'] = display_df['거리_km'].apply(lambda x: f"{x:.2f} km")
             st.dataframe(display_df.set_index('건물명'))
 
         else:
