@@ -1,64 +1,132 @@
 import streamlit as st
 import pandas as pd
-from math import radians, cos, sin, asin, sqrt
-from streamlit_folium import st_folium
+import numpy as np
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
 import folium
+from streamlit_folium import folium_static
 
-# ---- 거리 계산 함수 ----
-def haversine(lat1, lon1, lat2, lon2):
-    # 위도, 경도를 라디안 단위로 변환
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    # 거리 계산
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
-    c = 2 * asin(sqrt(a))
-    return 6371 * c  # 지구 반지름 = 6371km
-
-# ---- 데이터 로드 ----
-@st.cache_data
-def load_data():
-    df = pd.read_csv("서울시 공영주차장 안내 정보.csv", encoding="euc-kr")
-    df = df.dropna(subset=["위도", "경도"])
-    df["위도"] = df["위도"].astype(float)
-    df["경도"] = df["경도"].astype(float)
+# 1. 데이터 로드 및 전처리
+@st.cache_data # 데이터를 한 번 로드하면 다시 로드하지 않도록 캐싱
+def load_data(file_path):
+    df = pd.read_csv(file_path, encoding='cp949') # 한글 인코딩 문제 해결을 위해 cp949 또는 utf-8-sig 시도
+    # 'x 좌표'를 경도(longitude)로, 'y 좌표'를 위도(latitude)로 사용
+    df = df.rename(columns={'x 좌표': '경도', 'y 좌표': '위도'})
+    # 위도와 경도 컬럼이 숫자인지 확인하고, 숫자가 아니면 NaN으로 처리 (에러 방지)
+    df['위도'] = pd.to_numeric(df['위도'], errors='coerce')
+    df['경도'] = pd.to_numeric(df['경도'], errors='coerce')
+    # 위도 또는 경도가 없는(NaN) 행은 제거
+    df.dropna(subset=['위도', '경도'], inplace=True)
     return df
 
-df = load_data()
+# 2. 주소 -> 위도/경도 변환 함수 (Geocoding)
+@st.cache_data(show_spinner="주소를 위도/경도로 변환 중...")
+def geocode_address(address):
+    geolocator = Nominatim(user_agent="toilet_finder_app") # 사용자 에이전트 지정
+    try:
+        location = geolocator.geocode(address)
+        if location:
+            return (location.latitude, location.longitude)
+        else:
+            return None
+    except Exception as e:
+        st.error(f"주소 변환 중 오류가 발생했습니다: {e}")
+        return None
 
-# ---- Streamlit UI ----
-st.title("📍 지도에서 위치를 선택해 주변 주차장 찾기")
+# 3. 메인 스트림릿 앱
+def app():
+    st.title("내 근처 서울시 공중화장실 찾기 🚽")
 
-# 지도 기본 위치 (서울 시청)
-default_location = [37.5665, 126.9780]
-m = folium.Map(location=default_location, zoom_start=12)
+    # 데이터 로드
+    df = load_data("서울시 공중화장실 위치정보.csv")
 
-# 클릭 기능 추가
-click_info = st_folium(m, height=500, returned_objects=["last_clicked"])
+    if df.empty:
+        st.error("공중화장실 데이터를 로드하는 데 실패했거나 데이터가 비어 있습니다.")
+        return
 
-if click_info and click_info["last_clicked"]:
-    lat = click_info["last_clicked"]["lat"]
-    lon = click_info["last_clicked"]["lng"]
-    st.success(f"선택한 위치: 위도 {lat:.6f}, 경도 {lon:.6f}")
+    st.sidebar.header("내 위치 설정")
+    user_address = st.sidebar.text_input("현재 위치 주소 입력 (예: 서울특별시 강남구 테헤란로 101)", "서울특별시청")
+    
+    # 거리 슬라이더
+    distance_threshold = st.sidebar.slider(
+        "찾을 거리 (km)",
+        min_value=0.1, max_value=5.0, value=1.0, step=0.1
+    )
 
-    # 주차장 거리 계산
-    df["거리(km)"] = df.apply(lambda row: haversine(lat, lon, row["위도"], row["경도"]), axis=1)
-    nearby = df[df["거리(km)"] <= 1].sort_values("거리(km)").head(10)  # 1km 이내 상위 10개
+    user_location = None
+    if st.sidebar.button("내 위치로 화장실 찾기"):
+        if user_address:
+            user_location = geocode_address(user_address)
+            if user_location:
+                st.sidebar.success(f"입력된 위치: 위도 {user_location[0]:.4f}, 경도 {user_location[1]:.4f}")
+            else:
+                st.sidebar.error("입력된 주소를 찾을 수 없습니다. 다시 시도해 주세요.")
+        else:
+            st.sidebar.warning("주소를 입력해 주세요.")
+    
+    # 맵 및 결과 표시
+    if user_location:
+        st.subheader(f"내 위치({user_address}) 근처 {distance_threshold}km 이내 화장실")
 
-    # 결과 표시
-    st.write("### 📊 가까운 주차장 정보:")
-    st.dataframe(nearby[["주차장명", "주소", "전화번호", "거리(km)"]])
+        # 사용자 위치 위도, 경도
+        user_lat, user_lon = user_location
 
-    # 지도에 주차장 마커 표시
-    m2 = folium.Map(location=[lat, lon], zoom_start=15)
-    folium.Marker([lat, lon], tooltip="선택 위치", icon=folium.Icon(color="red")).add_to(m2)
+        # 각 화장실과의 거리 계산
+        # geodesic 함수는 (위도, 경도) 튜플을 인자로 받음
+        df['거리_km'] = df.apply(
+            lambda row: geodesic((user_lat, user_lon), (row['위도'], row['경도'])).km,
+            axis=1
+        )
 
-    for _, row in nearby.iterrows():
-        folium.Marker(
-            [row["위도"], row["경도"]],
-            tooltip=f"{row['주차장명']} ({row['거리(km)']:.2f}km)",
-            popup=row["주소"],
-            icon=folium.Icon(color="blue", icon="info-sign")
-        ).add_to(m2)
+        # 거리 기준으로 필터링
+        nearby_toilets = df[df['거리_km'] <= distance_threshold].sort_values(by='거리_km').reset_index(drop=True)
 
-    st_folium(m2, height=500)
+        if not nearby_toilets.empty:
+            st.write(f"총 {len(nearby_toilets)}개의 화장실이 {distance_threshold}km 이내에 있습니다.")
+            
+            # 지도 시각화 (Folium)
+            m = folium.Map(location=[user_lat, user_lon], zoom_start=14)
+
+            # 사용자 위치 마커
+            folium.Marker(
+                [user_lat, user_lon],
+                popup=f"내 위치: {user_address}",
+                icon=folium.Icon(color="red", icon="home", prefix="fa")
+            ).add_to(m)
+
+            # 근처 화장실 마커 추가
+            for idx, row in nearby_toilets.iterrows():
+                # 팝업 정보 구성
+                popup_html = f"""
+                <b>화장실명:</b> {row['건물명'] if pd.notna(row['건물명']) else '정보 없음'}<br>
+                <b>도로명주소:</b> {row['도로명주소']}<br>
+                <b>거리:</b> {row['거리_km']:.2f} km<br>
+                <b>개방시간:</b> {row['개방시간'] if pd.notna(row['개방시간']) else '정보 없음'}<br>
+                <b>장애인화장실:</b> {row['장애인화장실 현황'] if pd.notna(row['장애인화장실 현황']) else '정보 없음'}<br>
+                """
+                
+                folium.Marker(
+                    [row['위도'], row['경도']],
+                    popup=folium.Popup(popup_html, max_width=300),
+                    icon=folium.Icon(color="blue", icon="info-sign", prefix="fa")
+                ).add_to(m)
+            
+            # 지도 표시
+            folium_static(m)
+
+            # 필터링된 화장실 목록 표시
+            st.subheader("찾은 공중화장실 목록")
+            # 필요한 컬럼만 선택하여 표시 (예쁘게 보여주기 위함)
+            display_cols = ['건물명', '도로명주소', '거리_km', '개방시간', '화장실 현황', '장애인화장실 현황', '전화번호']
+            # NaN 값은 '정보 없음'으로 대체하여 깔끔하게 표시
+            display_df = nearby_toilets[display_cols].fillna('정보 없음')
+            display_df['거리_km'] = display_df['거리_km'].apply(lambda x: f"{x:.2f} km") # 거리 포맷팅
+            st.dataframe(display_df.set_index('건물명'))
+
+        else:
+            st.warning(f"{distance_threshold}km 이내에 화장실을 찾을 수 없습니다. 거리를 늘려보세요.")
+    else:
+        st.info("왼쪽 사이드바에서 주소를 입력하고 '내 위치로 화장실 찾기' 버튼을 눌러주세요.")
+
+if __name__ == '__main__':
+    app()
