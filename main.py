@@ -176,15 +176,21 @@ def app():
                 # KST로 가져온 시간을 is_toilet_open 함수에 전달
                 open_status = is_toilet_open(current_time_kst, row['개방시간_시작'], row['개방시간_종료'])
                 
+                # 마커 색상 및 아이콘 변경
                 if open_status == '개방':
                     marker_color = "blue"
-                    icon_type = "info-sign"
+                    icon_type = "toilet" # 이모지 아이콘
+                    prefix_type = "fa" # 'fa'를 사용하면 Font Awesome 아이콘을 사용합니다.
+                                       # Folium의 기본 이모지는 'emoji' prefix로 사용 가능하지만,
+                                       # Font Awesome 아이콘 중 화장실 모양이 더 명확합니다.
                 elif open_status == '폐쇄':
-                    marker_color = "darkred"
+                    marker_color = "lightgray" # 회색으로 변경
                     icon_type = "lock"
+                    prefix_type = "fa"
                 else: # 불명
-                    marker_color = "lightgray"
+                    marker_color = "orange" # 노란색에 가까운 오렌지로 변경
                     icon_type = "question-sign"
+                    prefix_type = "fa"
 
                 popup_html = f"""
                 <b>건물명:</b> {row['건물명'] if pd.notna(row['건물명']) else '정보 없음'}<br>
@@ -200,7 +206,7 @@ def app():
                 folium.Marker(
                     [row['위도'], row['경도']],
                     popup=folium.Popup(popup_html, max_width=300),
-                    icon=folium.Icon(color=marker_color, icon=icon_type, prefix="fa")
+                    icon=folium.Icon(color=marker_color, icon=icon_type, prefix=prefix_type)
                 ).add_to(m)
             
             folium_static(m)
