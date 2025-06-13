@@ -6,13 +6,11 @@ from geopy.distance import geodesic
 import folium
 from streamlit_folium import folium_static
 from datetime import datetime, time
-import urllib.parse # Not strictly needed anymore for external map links, but kept for general utility if future features need URL encoding
 
 # 1. 데이터 로드 및 전처리
 @st.cache_data
 def load_data(file_path):
-    # 인코딩 오류 해결: 'cp494'를 'cp949'로 수정했습니다.
-    # 만약 cp949로도 오류가 발생하면 'utf-8' 또는 'utf-8-sig'를 시도해보세요.
+    # CSV 파일 인코딩 오류 처리를 강화했습니다.
     try:
         df = pd.read_csv(file_path, encoding='cp949')
     except UnicodeDecodeError:
@@ -222,23 +220,23 @@ def app():
 
             st.dataframe(display_df.style.applymap(highlight_open_status, subset=['개방여부']).set_properties(**{'text-align': 'left'}))
             
-            st.markdown("---")
-            st.subheader("선택한 화장실 길찾기")
+            # 길찾기 관련 섹션을 완전히 제거합니다.
+            # st.markdown("---")
+            # st.subheader("선택한 화장실 길찾기")
             
-            selected_toilet_display_name = st.selectbox(
-                "길찾기를 원하는 화장실을 선택하세요:",
-                options=list(toilet_options.keys()),
-                index=0 if toilet_options else None
-            )
+            # selected_toilet_display_name = st.selectbox(
+            #     "길찾기를 원하는 화장실을 선택하세요:",
+            #     options=list(toilet_options.keys()),
+            #     index=0 if toilet_options else None
+            # )
 
-            selected_toilet_info = toilet_options.get(selected_toilet_display_name)
+            # selected_toilet_info = toilet_options.get(selected_toilet_display_name)
             
-            if selected_toilet_info:
-                st.write(f"선택된 화장실: **{selected_toilet_display_name}**")
-                st.info("현재 버전에서는 길찾기 링크를 제공하지 않습니다. 지도에서 직접 위치를 확인해주세요.") # 길찾기 링크 제거 안내 메시지 추가
-
-            else:
-                st.info("선택된 화장실 정보가 없습니다. 목록에서 화장실을 선택해주세요.")
+            # if selected_toilet_info:
+            #     st.write(f"선택된 화장실: **{selected_toilet_display_name}**")
+            #     st.info("현재 버전에서는 길찾기 링크를 제공하지 않습니다. 지도에서 직접 위치를 확인해주세요.")
+            # else:
+            #     st.info("선택된 화장실 정보가 없습니다. 목록에서 화장실을 선택해주세요.")
 
         else:
             st.warning(f"{distance_threshold}km 이내에 화장실을 찾을 수 없습니다. 거리를 늘려보세요.")
