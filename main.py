@@ -11,7 +11,7 @@ import pytz # 시간대 처리를 위해 pytz 라이브러리 추가
 # 1. 데이터 로드 및 전처리
 @st.cache_data
 def load_data(file_path):
-    # CSV 파일 인코딩 오류 처리를 강화했습니다.
+    # CSV 파일 인코딩 오류 처리를 강화합니다.
     try:
         df = pd.read_csv(file_path, encoding='cp949')
     except UnicodeDecodeError:
@@ -21,7 +21,6 @@ def load_data(file_path):
         except UnicodeDecodeError:
             st.error("CSV 파일 인코딩 오류! 'utf-8'로도 파일을 열 수 없습니다. 'utf-8-sig'로 시도합니다.")
             df = pd.read_csv(file_path, encoding='utf-8-sig')
-
 
     df = df.rename(columns={'x 좌표': '경도', 'y 좌표': '위도'})
     df['위도'] = pd.to_numeric(df['위도'], errors='coerce')
@@ -36,7 +35,7 @@ def load_data(file_path):
         if '24시간' in open_time_str or '상시' in open_time_str or '연중' in open_time_str:
             df.at[idx, '개방시간_시작'] = time(0, 0)
             df.at[idx, '개방시간_종료'] = time(23, 59, 59)
-        elif '~' in open_time_str:
+        elif '~' in open_time_str: 
             try:
                 start_str, end_str = open_time_str.split('~')
                 
@@ -68,6 +67,7 @@ def load_data(file_path):
                     df.at[idx, '개방시간_시작'] = start_time_obj
                     df.at[idx, '개방시간_종료'] = end_time_obj
             except ValueError:
+                # 파싱에 실패하면 시작/종료 시간이 None으로 남게 되어 '불명' 처리됩니다.
                 pass 
 
     return df
@@ -88,10 +88,10 @@ def geocode_address(address):
 
 # 3. 화장실 개방 여부 판단 함수
 def is_toilet_open(current_time, start_time, end_time):
-    if start_time is None or end_time is None:
+    if start_time is None or end_time is None: # 시작 또는 종료 시간이 불명이면 '불명' 반환
         return '불명'
     
-    if start_time <= end_time:
+    if start_time <= end_time: # 자정을 넘어가지 않는 일반적인 개방 시간 (예: 09:00 ~ 18:00)
         return '개방' if start_time <= current_time <= end_time else '폐쇄'
     else: # 자정을 넘어 개방 (예: 22:00 ~ 02:00)
         return '개방' if current_time >= start_time or current_time <= end_time else '폐쇄'
@@ -158,7 +158,7 @@ def app():
             # 현재 시간을 대한민국 표준시(KST)로 강제 지정
             korea_tz = pytz.timezone('Asia/Seoul')
             current_time_kst = datetime.now(korea_tz).time()
-            st.info(f"현재 시간 (대한민국 표준시): {current_time_kst.strftime('%H시 %M분')}") # 메시지 변경
+            st.info(f"현재 시간 (대한민국 표준시): {current_time_kst.strftime('%H시 %M분')}") 
 
             m = folium.Map(location=[user_lat, user_lon], zoom_start=14)
 
@@ -168,7 +168,6 @@ def app():
                 icon=folium.Icon(color="red", icon="home", prefix="fa")
             ).add_to(m)
 
-            toilet_options = {}
             for idx, row in nearby_toilets.iterrows():
                 # KST로 가져온 시간을 is_toilet_open 함수에 전달
                 open_status = is_toilet_open(current_time_kst, row['개방시간_시작'], row['개방시간_종료'])
@@ -199,13 +198,6 @@ def app():
                     popup=folium.Popup(popup_html, max_width=300),
                     icon=folium.Icon(color=marker_color, icon=icon_type, prefix="fa")
                 ).add_to(m)
-
-                display_name = f"{row['건물명']} ({row['도로명주소']})"
-                toilet_options[display_name] = {
-                    'address': row['도로명주소'],
-                    'lat': row['위도'],
-                    'lon': row['경도']
-                }
             
             folium_static(m)
 
