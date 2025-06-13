@@ -6,6 +6,7 @@ from geopy.distance import geodesic
 import folium
 from streamlit_folium import folium_static
 from datetime import datetime, time
+import pytz # 시간대 처리를 위해 pytz 라이브러리 추가
 
 # 1. 데이터 로드 및 전처리
 @st.cache_data
@@ -154,9 +155,11 @@ def app():
         if not nearby_toilets.empty:
             st.write(f"총 {len(nearby_toilets)}개의 화장실이 {distance_threshold}km 이내에 있습니다.")
             
-            current_time = datetime.now().time()
-            st.info(f"현재 시간: {current_time.strftime('%H시 %M분')}")
-            
+            # 현재 시간을 대한민국 표준시(KST)로 강제 지정
+            korea_tz = pytz.timezone('Asia/Seoul')
+            current_time_kst = datetime.now(korea_tz).time()
+            st.info(f"현재 시간 (대한민국 표준시): {current_time_kst.strftime('%H시 %M분')}") # 메시지 변경
+
             m = folium.Map(location=[user_lat, user_lon], zoom_start=14)
 
             folium.Marker(
@@ -167,7 +170,8 @@ def app():
 
             toilet_options = {}
             for idx, row in nearby_toilets.iterrows():
-                open_status = is_toilet_open(current_time, row['개방시간_시작'], row['개방시간_종료'])
+                # KST로 가져온 시간을 is_toilet_open 함수에 전달
+                open_status = is_toilet_open(current_time_kst, row['개방시간_시작'], row['개방시간_종료'])
                 
                 if open_status == '개방':
                     marker_color = "blue"
@@ -207,7 +211,7 @@ def app():
 
             st.subheader("찾은 공중화장실 목록")
             nearby_toilets['개방여부'] = nearby_toilets.apply(
-                lambda row: is_toilet_open(current_time, row['개방시간_시작'], row['개방시간_종료']),
+                lambda row: is_toilet_open(current_time_kst, row['개방시간_시작'], row['개방시간_종료']), # KST 시간 적용
                 axis=1
             )
             
@@ -220,24 +224,6 @@ def app():
 
             st.dataframe(display_df.style.applymap(highlight_open_status, subset=['개방여부']).set_properties(**{'text-align': 'left'}))
             
-            # 길찾기 관련 섹션을 완전히 제거합니다.
-            # st.markdown("---")
-            # st.subheader("선택한 화장실 길찾기")
-            
-            # selected_toilet_display_name = st.selectbox(
-            #     "길찾기를 원하는 화장실을 선택하세요:",
-            #     options=list(toilet_options.keys()),
-            #     index=0 if toilet_options else None
-            # )
-
-            # selected_toilet_info = toilet_options.get(selected_toilet_display_name)
-            
-            # if selected_toilet_info:
-            #     st.write(f"선택된 화장실: **{selected_toilet_display_name}**")
-            #     st.info("현재 버전에서는 길찾기 링크를 제공하지 않습니다. 지도에서 직접 위치를 확인해주세요.")
-            # else:
-            #     st.info("선택된 화장실 정보가 없습니다. 목록에서 화장실을 선택해주세요.")
-
         else:
             st.warning(f"{distance_threshold}km 이내에 화장실을 찾을 수 없습니다. 거리를 늘려보세요.")
     else:
