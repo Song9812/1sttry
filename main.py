@@ -32,44 +32,48 @@ def load_data(file_path):
     
     for idx, row in df.iterrows():
         open_time_str = str(row['개방시간']).strip()
+        
+        # '24시간', '상시', '연중' 등의 키워드 처리
         if '24시간' in open_time_str or '상시' in open_time_str or '연중' in open_time_str:
             df.at[idx, '개방시간_시작'] = time(0, 0)
             df.at[idx, '개방시간_종료'] = time(23, 59, 59)
-        elif '~' in open_time_str: 
-            try:
-                start_str, end_str = open_time_str.split('~')
+        # '~' 또는 '-' 기호를 포함하는 시간 범위 처리
+        elif '~' in open_time_str or '-' in open_time_str: 
+            # 어떤 기호로 분리되어 있는지 확인하고 분리
+            if '~' in open_time_str:
+                parts = open_time_str.split('~')
+            else: # '-' 인 경우
+                parts = open_time_str.split('-')
+
+            if len(parts) == 2: # 시작 시간과 종료 시간이 모두 있는 경우
+                start_str, end_str = parts[0].strip(), parts[1].strip()
                 
                 start_time_obj = None
                 end_time_obj = None
 
-                # HH:MM 형식 시도
+                # 시작 시간 파싱 시도 (HH:MM -> HHMM 순으로)
                 try:
-                    start_time_obj = datetime.strptime(start_str.strip(), '%H:%M').time()
+                    start_time_obj = datetime.strptime(start_str, '%H:%M').time()
                 except ValueError:
-                    pass
-                if start_time_obj is None: # HHMM 형식 시도
                     try:
-                        start_time_obj = datetime.strptime(start_str.strip(), '%H%M').time()
+                        start_time_obj = datetime.strptime(start_str, '%H%M').time()
                     except ValueError:
-                        pass
+                        pass # 파싱 실패, None 유지
                 
+                # 종료 시간 파싱 시도 (HH:MM -> HHMM 순으로)
                 try:
-                    end_time_obj = datetime.strptime(end_str.strip(), '%H:%M').time()
+                    end_time_obj = datetime.strptime(end_str, '%H:%M').time()
                 except ValueError:
-                    pass
-                if end_time_obj is None: # HHMM 형식 시도
                     try:
-                        end_time_obj = datetime.strptime(end_str.strip(), '%H%M').time()
+                        end_time_obj = datetime.strptime(end_str, '%H%M').time()
                     except ValueError:
-                        pass
+                        pass # 파싱 실패, None 유지
                 
-                if start_time_obj and end_time_obj:
+                if start_time_obj and end_time_obj: # 두 시간 모두 성공적으로 파싱된 경우에만 적용
                     df.at[idx, '개방시간_시작'] = start_time_obj
                     df.at[idx, '개방시간_종료'] = end_time_obj
-            except ValueError:
-                # 파싱에 실패하면 시작/종료 시간이 None으로 남게 되어 '불명' 처리됩니다.
-                pass 
-
+            # else: parts의 길이가 2가 아니면 (예: '12-34-56'처럼 잘못된 형식) 이 경우도 None으로 남아 '불명' 처리
+        # else: 위의 어떤 조건에도 해당하지 않으면 시작/종료 시간은 None으로 남아 '불명' 처리
     return df
 
 # 2. 주소 -> 위도/경도 변환 함수 (Geocoding)
