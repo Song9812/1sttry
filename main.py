@@ -6,7 +6,7 @@ from geopy.distance import geodesic
 import folium
 from streamlit_folium import folium_static
 from datetime import datetime, time
-import urllib.parse # URL 인코딩을 위해 추가
+import urllib.parse # Not strictly needed anymore for external map links, but kept for general utility if future features need URL encoding
 
 # 1. 데이터 로드 및 전처리
 @st.cache_data
@@ -235,18 +235,8 @@ def app():
             
             if selected_toilet_info:
                 st.write(f"선택된 화장실: **{selected_toilet_display_name}**")
-                
-                # Google 지도 URL (위도, 경도 기반, travelmode=walking으로 변경)
-                Maps_url = ( # Maps_url 대신 Maps_url 변수명 사용
-                    f"https://www.google.com/maps/dir/"
-                    f"?api=1"
-                    f"&origin={user_lat},{user_lon}"
-                    f"&destination={selected_toilet_info['lat']},{selected_toilet_info['lon']}"
-                    f"&travelmode=walking" # 도보 경로로 변경
-                )
+                st.info("현재 버전에서는 길찾기 링크를 제공하지 않습니다. 지도에서 직접 위치를 확인해주세요.") # 길찾기 링크 제거 안내 메시지 추가
 
-                st.markdown(f"[**Google 지도로 길찾기 (도보)**]({Maps_url})", unsafe_allow_html=True) # 텍스트도 변경
-                
             else:
                 st.info("선택된 화장실 정보가 없습니다. 목록에서 화장실을 선택해주세요.")
 
