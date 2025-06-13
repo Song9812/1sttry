@@ -235,7 +235,41 @@ def app():
                     icon=folium.Icon(color=marker_color, icon=icon_type, prefix=prefix_type)
                 ).add_to(m)
             
-            folium_static(m) # Streamlit에 Folium 지도 표시
+            # 지도와 범례를 함께 표시하기 위해 Streamlit의 컬럼 기능을 사용
+            col1, col2 = st.columns([0.7, 0.3]) # 지도가 70%, 범례가 30% 영역 차지
+
+            with col1:
+                folium_static(m, width=700) # 지도 표시
+            
+            with col2:
+                st.markdown("### 지도 마커 범례")
+                st.markdown(f"""
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <div style="width: 20px; height: 20px; background-color: blue; border-radius: 50%; margin-right: 10px; display: flex; justify-content: center; align-items: center;">
+                        <i class="fa fa-toilet" style="color: white; font-size: 14px;"></i>
+                    </div>
+                    <span><b>현재 개방 화장실</b></span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <div style="width: 20px; height: 20px; background-color: lightgray; border-radius: 50%; margin-right: 10px; display: flex; justify-content: center; align-items: center;">
+                        <i class="fa fa-lock" style="color: white; font-size: 14px;"></i>
+                    </div>
+                    <span><b>현재 폐쇄 화장실</b></span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <div style="width: 20px; height: 20px; background-color: orange; border-radius: 50%; margin-right: 10px; display: flex; justify-content: center; align-items: center;">
+                        <i class="fa fa-question-sign" style="color: white; font-size: 14px;"></i>
+                    </div>
+                    <span><b>개방 시간 불명/정보 없음</b></span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <div style="width: 20px; height: 20px; background-color: red; border-radius: 50%; margin-right: 10px; display: flex; justify-content: center; align-items: center;">
+                        <i class="fa fa-home" style="color: white; font-size: 14px;"></i>
+                    </div>
+                    <span><b>내 위치</b></span>
+                </div>
+                """, unsafe_allow_html=True)
+
 
             st.subheader("찾은 공중화장실 목록")
             # 데이터프레임에 개방 여부 컬럼 추가
