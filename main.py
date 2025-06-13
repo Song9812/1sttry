@@ -7,14 +7,10 @@ import folium
 from streamlit_folium import folium_static
 from datetime import datetime, time, timedelta
 
-# maps_navigation 도구 import (가상 환경에서 제공되는 도구)
-# 실제 Streamlit 앱에서는 직접 사용할 수 없으므로, 웹 링크로 대체하여 구현합니다.
-# import maps_navigation # 이 줄은 실제 Streamlit 앱에서는 주석 처리되거나 제거되어야 합니다.
-
 # 1. 데이터 로드 및 전처리
 @st.cache_data # 데이터를 한 번 로드하면 다시 로드하지 않도록 캐싱
 def load_data(file_path):
-    df = pd.read_csv(file_path, encoding='cp949') # 한글 인코딩 문제 해결을 위해 cp949 또는 utf-8-sig 시도
+    df = pd.read_csv(file_path, encoding='cp949') # 한글 인코딩 문제 해결을 위해 cp494 또는 utf-8-sig 시도
     # 'x 좌표'를 경도(longitude)로, 'y 좌표'를 위도(latitude)로 사용
     df = df.rename(columns={'x 좌표': '경도', 'y 좌표': '위도'})
     # 위도와 경도 컬럼이 숫자인지 확인하고, 숫자가 아니면 NaN으로 처리 (에러 방지)
@@ -34,10 +30,8 @@ def load_data(file_path):
             df.at[idx, '개방시간_종료'] = time(23, 59, 59)
         elif '~' in open_time_str:
             try:
-                # '09:00~18:00', '9:00~18:00', '0900~1800' 등 다양한 형식 처리 시도
                 start_str, end_str = open_time_str.split('~')
                 
-                # 시간 파싱을 위한 유연한 처리
                 start_time_obj = None
                 end_time_obj = None
 
@@ -63,16 +57,13 @@ def load_data(file_path):
                     except ValueError:
                         pass
                 
-                # 최종적으로 파싱 성공 시에만 할당
                 if start_time_obj and end_time_obj:
                     df.at[idx, '개방시간_시작'] = start_time_obj
                     df.at[idx, '개방시간_종료'] = end_time_obj
                 else:
-                    # 파싱 실패 시 None으로 남겨둠
                     pass
             except ValueError:
-                pass # 파싱 오류 시 (예: 잘못된 형식) None 유지
-        # 그 외의 경우는 None으로 남겨두어 '개방시간 불명'으로 처리
+                pass 
 
     return df
 
@@ -101,9 +92,18 @@ def is_toilet_open(current_time, start_time, end_time):
     else: # 자정을 넘어 개방 (예: 22:00 시작, 02:00 종료)
         return '개방' if current_time >= start_time or current_time <= end_time else '폐쇄'
 
+# 4. 개방여부 스타일링 함수
+def highlight_open_status(s):
+    if s == '개방':
+        return 'background-color: #e6ffe6; color: green; font-weight: bold;' # 연한 초록색 배경, 초록색 글씨
+    elif s == '폐쇄':
+        return 'background-color: #ffe6e6; color: red; font-weight: bold;' # 연한 빨간색 배경, 빨간색 글씨
+    else: # 불명
+        return 'background-color: #f0f0f0; color: gray;' # 회색 배경, 회색 글씨
 
-# 4. 메인 스트림릿 앱
+# 5. 메인 스트림릿 앱
 def app():
+    st.set_page_config(layout="wide") # 넓은 레이아웃 사용
     st.title("내 근처 서울시 공중화장실 찾기 🚽")
 
     # 데이터 로드
@@ -220,12 +220,18 @@ def app():
                 lambda row: is_toilet_open(current_time, row['개방시간_시작'], row['개방시간_종료']),
                 axis=1
             )
-            display_cols = ['건물명', '도로명주소', '거리_km', '개방시간', '개방여부', '화장실 현황', '장애인화장실 현황', '전화번호']
-            display_df = nearby_toilets[display_cols].fillna('정보 없음')
-            display_df['거리_km'] = display_df['거리_km'].apply(lambda x: f"{x:.2f} km") # 거리 포맷팅
             
-            st.dataframe(display_df.set_index('건물명'))
+            # 표에 표시할 컬럼 순서 재배치
+            display_cols_ordered = [
+                '건물명', '거리_km', '개방시간', '개방여부',
+                '화장실 현황', '장애인화장실 현황', '도로명주소', '전화번호'
+            ]
+            display_df = nearby_toilets[display_cols_ordered].fillna('정보 없음')
+            display_df['거리_km'] = display_df['거리_km'].apply(lambda x: f"{x:.2f} km") # 거리 포맷팅
 
+            # '개방여부' 컬럼 하이라이트 스타일 적용
+            st.dataframe(display_df.style.applymap(highlight_open_status, subset=['개방여부']).set_properties(**{'text-align': 'left'}))
+            
             st.markdown("---")
             st.subheader("선택한 화장실 길찾기")
             
@@ -233,7 +239,7 @@ def app():
             selected_toilet_display_name = st.selectbox(
                 "길찾기를 원하는 화장실을 선택하세요:",
                 options=list(toilet_options.keys()),
-                index=0 # 기본적으로 첫 번째 항목 선택
+                index=0 if toilet_options else None # 화장실이 없을 때 None
             )
 
             # 선택된 화장실 정보 가져오기
@@ -242,39 +248,32 @@ def app():
             if selected_toilet_info:
                 st.write(f"선택된 화장실: **{selected_toilet_display_name}**")
                 
-                # 구글 지도로 바로 연결하는 버튼
-                # 출발지: 사용자 현재 위치 (위도, 경도)
-                # 목적지: 선택된 화장실 (위도, 경도)
-                Maps_url = (
-                    f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}"
-                    f"&destination={selected_toilet_info['lat']},{selected_toilet_info['lon']}"
-                    f"&travelmode=driving" # driving, walking, bicycling, transit 중 선택
+                # 카카오맵 도보 길찾기 URL
+                # `ep` (end point): 목적지 위도, 경도
+                # `sp` (start point): 출발지 위도, 경도
+                # `by=FOOT` (도보)
+                kakao_map_url = (
+                    f"https://map.kakao.com/?sName=내위치&eName={selected_toilet_info['address']}"
+                    f"&sX={user_lon}&sY={user_lat}&eX={selected_toilet_info['lon']}&eY={selected_toilet_info['lat']}"
+                    f"&target=walk" # 도보 경로
                 )
+
+                # 네이버 지도 도보 길찾기 URL
+                # `slat`, `slng`: 출발지 위도, 경도
+                # `dlat`, `dlng`: 목적지 위도, 경도
+                # `menu=route`
+                # `rpath=-1` (도보)
+                naver_map_url = (
+                    f"https://map.naver.com/p/search/{selected_toilet_info['address']}?c={user_lat},{user_lon},15,0,0,0,dh"
+                    f"&sp={user_lat},{user_lon},내위치"
+                    f"&ep={selected_toilet_info['lat']},{selected_toilet_info['lon']},{selected_toilet_info['address']}"
+                    f"&pathType=1" # 1: 도보
+                )
+
+                st.markdown(f"[**카카오맵으로 길찾기 (도보)**]({kakao_map_url})", unsafe_allow_html=True)
+                st.markdown(f"[**네이버 지도로 길찾기 (도보)**]({naver_map_url})", unsafe_allow_html=True)
+                st.markdown(f"[Google 지도로 길찾기 (자동차)]({Maps_url})", unsafe_allow_html=True) # 기존 구글 지도도 남겨둠
                 
-                st.markdown(f"[Google 지도로 길찾기 (새 탭 열림)]({Maps_url})", unsafe_allow_html=True)
-
-                # **(참고) maps_navigation 도구를 사용하는 예시 (현재 환경에서만 가능)**
-                # if st.button("내비게이션 도구로 길찾기"):
-                #     try:
-                #         # 가상 환경에서 maps_navigation 도구 사용 시
-                #         directions = maps_navigation.Google Maps(
-                #             origin=user_address, # 사용자 주소
-                #             destination=selected_toilet_info['address'] # 선택된 화장실 주소
-                #         )
-                #         if directions and directions.mapUrl:
-                #             st.success("길찾기 정보가 생성되었습니다.")
-                #             st.markdown(f"**[길찾기 지도 보기]({directions.mapUrl})**", unsafe_allow_html=True)
-                #             if directions.routes:
-                #                 st.write("---")
-                #                 st.write("**경로 요약:**")
-                #                 for i, route in enumerate(directions.routes):
-                #                     st.write(f"- 경로 {i+1}: {route.summary} (약 {route.duration.text}, {route.distance.text})")
-                #                     # st.json(route.legs[0].steps) # 상세 스텝
-                #         else:
-                #             st.warning("길찾기 정보를 가져올 수 없습니다. 주소를 확인하거나 다른 방법을 시도해 보세요.")
-                #     except Exception as e:
-                #         st.error(f"길찾기 도구 사용 중 오류가 발생했습니다: {e}")
-
             else:
                 st.info("선택된 화장실 정보가 없습니다. 목록에서 화장실을 선택해주세요.")
 
